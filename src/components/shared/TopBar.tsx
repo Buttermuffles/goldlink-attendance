@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { Bell, Clock, Search, Menu } from 'lucide-react';
+import { Bell, Clock, Search, Menu, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ClockInModal } from '@/components/shared/ClockInModal';
 
 interface TopBarProps {
   onMobileMenuToggle?: () => void;
@@ -10,7 +10,8 @@ interface TopBarProps {
 
 export function TopBar({ onMobileMenuToggle }: TopBarProps): React.ReactElement {
   const { user } = useAuthStore();
-  const [clockInOpen, setClockInOpen] = useState(false);
+  const [clockModalOpen, setClockModalOpen] = useState(false);
+  const [clockMode, setClockMode] = useState<'clock-in' | 'clock-out'>('clock-in');
   const [currentTime, setCurrentTime] = useState(new Date());
 
   React.useEffect(() => {
@@ -32,6 +33,16 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps): React.ReactElement 
     month: 'long',
     day: 'numeric',
   });
+
+  const openClockIn = () => {
+    setClockMode('clock-in');
+    setClockModalOpen(true);
+  };
+
+  const openClockOut = () => {
+    setClockMode('clock-out');
+    setClockModalOpen(true);
+  };
 
   return (
     <>
@@ -63,14 +74,23 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps): React.ReactElement 
             <span className="text-[10px] text-[#A3A3A3]">{dateString}</span>
           </div>
 
-          {/* Quick clock-in button */}
+          {/* Clock In / Clock Out buttons */}
           <Button
             size="sm"
-            onClick={() => setClockInOpen(true)}
+            onClick={openClockIn}
             className="gap-1.5"
           >
             <Clock size={14} />
             <span className="hidden sm:inline">Clock In</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openClockOut}
+            className="gap-1.5"
+          >
+            <LogOut size={14} />
+            <span className="hidden sm:inline">Clock Out</span>
           </Button>
 
           {/* Notifications */}
@@ -91,37 +111,12 @@ export function TopBar({ onMobileMenuToggle }: TopBarProps): React.ReactElement 
         </div>
       </header>
 
-      {/* Clock-In Dialog */}
-      <Dialog open={clockInOpen} onClose={() => setClockInOpen(false)}>
-        <DialogHeader>
-          <DialogTitle>Quick Clock In</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="text-center py-6">
-            <p className="text-4xl font-mono font-bold text-brand-primary">{timeString}</p>
-            <p className="text-sm text-[#A3A3A3] mt-2">{dateString}</p>
-          </div>
-          <div className="bg-[rgb(26,26,26)] rounded-lg p-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-[#A3A3A3]">Employee:</span>
-              <span className="text-[#FAFAFA]">{user?.name}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-[#A3A3A3]">Location:</span>
-              <span className="text-[#FAFAFA]">Detecting GPS...</span>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <Button className="flex-1" onClick={() => setClockInOpen(false)}>
-              <Clock size={16} className="mr-2" />
-              Clock In Now
-            </Button>
-            <Button variant="outline" onClick={() => setClockInOpen(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+      {/* Clock In/Out Modal with RFID, Manual, Photo Recognition + Selfie */}
+      <ClockInModal
+        open={clockModalOpen}
+        onClose={() => setClockModalOpen(false)}
+        mode={clockMode}
+      />
     </>
   );
 }

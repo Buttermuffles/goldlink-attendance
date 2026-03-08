@@ -22,7 +22,7 @@ export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
 export type PayPeriodType = 'weekly' | 'semi-monthly' | 'monthly';
 
-export type ClockMethod = 'gps' | 'manual' | 'ip-fallback';
+export type ClockMethod = 'gps' | 'manual' | 'rfid' | 'photo-recognition' | 'ip-fallback';
 
 // ─── User & Auth ─────────────────────────────────────────────
 export interface User {
@@ -93,6 +93,10 @@ export interface AttendanceRecord {
   clockOut?: string;
   clockInLocation?: GeoLocation;
   clockOutLocation?: GeoLocation;
+  clockInMethod?: ClockMethod;
+  clockOutMethod?: ClockMethod;
+  clockInSelfie?: string;
+  clockOutSelfie?: string;
   status: AttendanceStatus;
   hoursWorked: number;
   overtimeHours: number;
