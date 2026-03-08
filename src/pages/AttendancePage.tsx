@@ -3,7 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { mockAttendance } from '@/lib/mockData';
+import { useAttendanceStore } from '@/stores/attendanceStore';
+import { useEmployeeStore } from '@/stores/employeeStore';
+import { useAuthStore } from '@/stores/authStore';
+import { AttendanceFormModal } from '@/components/modals/AttendanceFormModal';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatTime } from '@/lib/utils';
 import type { AttendanceRecord } from '@/types';
 import {
@@ -13,25 +17,73 @@ import {
   Filter,
   MapPin,
   AlertTriangle,
+  Plus,
+  Edit,
+  Trash2,
 } from 'lucide-react';
 
 export function AttendancePage(): React.ReactElement {
+  const { records, addRecord, updateRecord, deleteRecord } = useAttendanceStore();
+  const { employees } = useEmployeeStore();
+  const { hasPermission } = useAuthStore();
   const [dateFilter, setDateFilter] = useState('2026-03-08');
   const [statusFilter, setStatusFilter] = useState('');
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AttendanceRecord | null>(null);
 
-  const filteredRecords = mockAttendance.filter((rec) => {
+  const filteredRecords = records.filter((rec) => {
     const matchesDate = rec.date === dateFilter;
     const matchesStatus = !statusFilter || rec.status === statusFilter;
     return matchesDate && matchesStatus;
   });
 
-  const statusCounts = mockAttendance.reduce(
+  const statusCounts = records.reduce(
     (acc, rec) => {
       acc[rec.status] = (acc[rec.status] ?? 0) + 1;
       return acc;
     },
     {} as Record<string, number>
   );
+
+  const employeeNames = employees.map((e) => ({
+    label: `${e.firstName} ${e.lastName}`,
+    value: e.id,
+    name: `${e.firstName} ${e.lastName}`,
+  }));
+
+  const handleAdd = () => {
+    setEditRecord(null);
+    setShowFormModal(true);
+  };
+
+  const handleEdit = (rec: AttendanceRecord) => {
+    setEditRecord(rec);
+    setShowFormModal(true);
+  };
+
+  const handleFormSubmit = (data: Omit<AttendanceRecord, 'id'>) => {
+    try {
+      if (editRecord) {
+        updateRecord(editRecord.id, data);
+      } else {
+        addRecord(data);
+      }
+    } catch {
+      // Error handled inside store with toast
+    }
+  };
+
+  const handleDelete = () => {
+    if (deleteTarget) {
+      try {
+        deleteRecord(deleteTarget.id);
+      } catch {
+        // Error handled inside store
+      }
+      setDeleteTarget(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -46,10 +98,12 @@ export function AttendancePage(): React.ReactElement {
             <Download size={16} />
             Export
           </Button>
-          <Button className="gap-2">
-            <Clock size={16} />
-            Clock In
-          </Button>
+          {hasPermission('attendance:create') && (
+            <Button className="gap-2" onClick={handleAdd}>
+              <Plus size={16} />
+              Add Record
+            </Button>
+          )}
         </div>
       </div>
 
@@ -123,6 +177,7 @@ export function AttendancePage(): React.ReactElement {
                   <th className="text-left text-xs font-medium text-[#A3A3A3] uppercase tracking-wider p-4 hidden lg:table-cell">OT</th>
                   <th className="text-left text-xs font-medium text-[#A3A3A3] uppercase tracking-wider p-4">Status</th>
                   <th className="text-left text-xs font-medium text-[#A3A3A3] uppercase tracking-wider p-4 hidden sm:table-cell">Flags</th>
+                  <th className="text-right text-xs font-medium text-[#A3A3A3] uppercase tracking-wider p-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -170,11 +225,33 @@ export function AttendancePage(): React.ReactElement {
                         )}
                       </div>
                     </td>
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {hasPermission('attendance:update') && (
+                          <button
+                            onClick={() => handleEdit(record)}
+                            className="p-2 rounded-lg text-[#A3A3A3] hover:bg-[rgb(55,55,55)] transition-colors"
+                            title="Edit"
+                          >
+                            <Edit size={14} />
+                          </button>
+                        )}
+                        {hasPermission('attendance:delete') && (
+                          <button
+                            onClick={() => setDeleteTarget(record)}
+                            className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {filteredRecords.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-[#A3A3A3]">
+                    <td colSpan={8} className="p-8 text-center text-[#A3A3A3]">
                       No attendance records for this date.
                     </td>
                   </tr>
@@ -184,6 +261,25 @@ export function AttendancePage(): React.ReactElement {
           </div>
         </CardContent>
       </Card>
+
+      {/* Create/Edit Modal */}
+      <AttendanceFormModal
+        open={showFormModal}
+        onClose={() => setShowFormModal(false)}
+        onSubmit={handleFormSubmit}
+        record={editRecord}
+        employeeNames={employeeNames}
+      />
+
+      {/* Delete Confirm */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Attendance Record"
+        message={`Are you sure you want to delete the attendance record for ${deleteTarget?.employeeName}?`}
+        confirmLabel="Delete"
+      />
     </div>
   );
 }

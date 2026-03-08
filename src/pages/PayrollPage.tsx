@@ -3,8 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { mockPayroll } from '@/lib/mockData';
+import { usePayrollStore } from '@/stores/payrollStore';
+import { useEmployeeStore } from '@/stores/employeeStore';
+import { useAuthStore } from '@/stores/authStore';
+import { PayrollFormModal } from '@/components/modals/PayrollFormModal';
+import { PayrollDetailModal } from '@/components/modals/PayrollDetailModal';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatCurrency } from '@/lib/utils';
+import type { PayrollRecord } from '@/types';
 import {
   DollarSign,
   Download,
@@ -12,18 +18,77 @@ import {
   Lock,
   Calculator,
   TrendingUp,
+  Edit,
+  Trash2,
+  CheckCircle,
+  Plus,
 } from 'lucide-react';
 
 export function PayrollPage(): React.ReactElement {
+  const { records, addRecord, updateRecord, deleteRecord, finalizeRecord } = usePayrollStore();
+  const { employees } = useEmployeeStore();
+  const { hasPermission } = useAuthStore();
   const [periodFilter, setPeriodFilter] = useState('');
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [editRecord, setEditRecord] = useState<PayrollRecord | null>(null);
+  const [viewRecord, setViewRecord] = useState<PayrollRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PayrollRecord | null>(null);
+
+  const employeeNames = employees.map((e) => ({
+    label: `${e.firstName} ${e.lastName}`,
+    value: e.id,
+    name: `${e.firstName} ${e.lastName}`,
+    dailyRate: e.dailyRate,
+  }));
 
   const filteredPayroll = periodFilter
-    ? mockPayroll.filter((p) => p.status === periodFilter)
-    : mockPayroll;
+    ? records.filter((p) => p.status === periodFilter)
+    : records;
 
   const totalGross = filteredPayroll.reduce((sum, p) => sum + p.grossPay, 0);
   const totalDeductions = filteredPayroll.reduce((sum, p) => sum + p.totalDeductions, 0);
   const totalNet = filteredPayroll.reduce((sum, p) => sum + p.netPay, 0);
+
+  const handleAdd = () => {
+    setEditRecord(null);
+    setShowFormModal(true);
+  };
+
+  const handleEdit = (record: PayrollRecord) => {
+    setEditRecord(record);
+    setShowFormModal(true);
+  };
+
+  const handleFormSubmit = (data: Omit<PayrollRecord, 'id'>) => {
+    try {
+      if (editRecord) {
+        updateRecord(editRecord.id, data);
+      } else {
+        addRecord(data);
+      }
+    } catch {
+      // Error handled inside store with toast
+    }
+  };
+
+  const handleDelete = () => {
+    if (deleteTarget) {
+      try {
+        deleteRecord(deleteTarget.id);
+      } catch {
+        // Error handled inside store
+      }
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleFinalize = (record: PayrollRecord) => {
+    try {
+      finalizeRecord(record.id);
+    } catch {
+      // Error handled inside store
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -38,10 +103,12 @@ export function PayrollPage(): React.ReactElement {
             <Download size={16} />
             Export CSV
           </Button>
-          <Button className="gap-2">
-            <Calculator size={16} />
-            Run Payroll
-          </Button>
+          {hasPermission('payroll:create') && (
+            <Button className="gap-2" onClick={handleAdd}>
+              <Plus size={16} />
+              Run Payroll
+            </Button>
+          )}
         </div>
       </div>
 
@@ -131,7 +198,7 @@ export function PayrollPage(): React.ReactElement {
                   <th className="text-right text-xs font-medium text-[#A3A3A3] uppercase tracking-wider p-4 hidden md:table-cell">Tax</th>
                   <th className="text-right text-xs font-medium text-[#A3A3A3] uppercase tracking-wider p-4">Net Pay</th>
                   <th className="text-left text-xs font-medium text-[#A3A3A3] uppercase tracking-wider p-4">Status</th>
-                  <th className="text-right text-xs font-medium text-[#A3A3A3] uppercase tracking-wider p-4 hidden sm:table-cell">Actions</th>
+                  <th className="text-right text-xs font-medium text-[#A3A3A3] uppercase tracking-wider p-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -166,10 +233,43 @@ export function PayrollPage(): React.ReactElement {
                     <td className="p-4">
                       <Badge variant={record.status}>{record.status}</Badge>
                     </td>
-                    <td className="p-4 text-right hidden sm:table-cell">
-                      <Button variant="ghost" size="sm" className="gap-1" title="View Payslip">
-                        <FileText size={14} />
-                      </Button>
+                    <td className="p-4 text-right">
+                      <div className="flex gap-1 justify-end">
+                        <button
+                          onClick={() => setViewRecord(record)}
+                          className="p-2 rounded-lg text-[#A3A3A3] hover:bg-[rgb(55,55,55)] transition-colors"
+                          title="View Payslip"
+                        >
+                          <FileText size={14} />
+                        </button>
+                        {record.status === 'draft' && hasPermission('payroll:update') && (
+                          <button
+                            onClick={() => handleEdit(record)}
+                            className="p-2 rounded-lg text-[#A3A3A3] hover:bg-[rgb(55,55,55)] transition-colors"
+                            title="Edit"
+                          >
+                            <Edit size={14} />
+                          </button>
+                        )}
+                        {record.status === 'draft' && hasPermission('payroll:finalize') && (
+                          <button
+                            onClick={() => handleFinalize(record)}
+                            className="p-2 rounded-lg text-green-400 hover:bg-green-500/10 transition-colors"
+                            title="Finalize"
+                          >
+                            <CheckCircle size={14} />
+                          </button>
+                        )}
+                        {record.status === 'draft' && hasPermission('payroll:delete') && (
+                          <button
+                            onClick={() => setDeleteTarget(record)}
+                            className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -178,6 +278,32 @@ export function PayrollPage(): React.ReactElement {
           </div>
         </CardContent>
       </Card>
+
+      {/* Create/Edit Modal */}
+      <PayrollFormModal
+        open={showFormModal}
+        onClose={() => setShowFormModal(false)}
+        onSubmit={handleFormSubmit}
+        record={editRecord}
+        employeeNames={employeeNames}
+      />
+
+      {/* View Payslip Modal */}
+      <PayrollDetailModal
+        open={!!viewRecord}
+        onClose={() => setViewRecord(null)}
+        record={viewRecord}
+      />
+
+      {/* Delete Confirm */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Payroll Record"
+        message={`Are you sure you want to delete the payroll record for ${deleteTarget?.employeeName}?`}
+        confirmLabel="Delete"
+      />
     </div>
   );
 }

@@ -20,11 +20,11 @@ export function LoginPage(): React.ReactElement {
     setLoading(true);
 
     setTimeout(() => {
-      const success = login(email, password);
-      if (success) {
+      const result = login(email, password);
+      if (result.success) {
         navigate('/');
       } else {
-        setError('Invalid email or password');
+        setError(result.error ?? 'Invalid email or password');
       }
       setLoading(false);
     }, 800);

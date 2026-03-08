@@ -5,7 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
-import { mockEmployees } from '@/lib/mockData';
+import { useEmployeeStore } from '@/stores/employeeStore';
+import { useAuthStore } from '@/stores/authStore';
+import { EmployeeFormModal } from '@/components/modals/EmployeeFormModal';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DEPARTMENTS } from '@/constants';
 import type { Employee } from '@/types';
 import {
@@ -14,18 +17,25 @@ import {
   Mail,
   Phone,
   MapPin,
-  MoreHorizontal,
+  Edit,
+  Trash2,
+  Eye,
   Filter,
 } from 'lucide-react';
 
 export function EmployeesPage(): React.ReactElement {
+  const { employees, addEmployee, updateEmployee, deleteEmployee } = useEmployeeStore();
+  const { hasPermission } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
 
-  const filteredEmployees = mockEmployees.filter((emp) => {
+  const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
       `${emp.firstName} ${emp.lastName} ${emp.employeeId} ${emp.email}`
         .toLowerCase()
@@ -40,18 +50,53 @@ export function EmployeesPage(): React.ReactElement {
     setShowDetailDialog(true);
   };
 
+  const handleAdd = () => {
+    setEditEmployee(null);
+    setShowFormModal(true);
+  };
+
+  const handleEdit = (emp: Employee) => {
+    setEditEmployee(emp);
+    setShowFormModal(true);
+  };
+
+  const handleFormSubmit = (data: Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      if (editEmployee) {
+        updateEmployee(editEmployee.id, data);
+      } else {
+        addEmployee(data);
+      }
+    } catch {
+      // Error handled inside store with toast
+    }
+  };
+
+  const handleDelete = () => {
+    if (deleteTarget) {
+      try {
+        deleteEmployee(deleteTarget.id);
+      } catch {
+        // Error handled inside store with toast
+      }
+      setDeleteTarget(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#FAFAFA]">Employees</h1>
-          <p className="text-sm text-[#A3A3A3]">{mockEmployees.length} total employees</p>
+          <p className="text-sm text-[#A3A3A3]">{employees.length} total employees</p>
         </div>
-        <Button className="gap-2">
-          <Plus size={16} />
-          Add Employee
-        </Button>
+        {hasPermission('employees:create') && (
+          <Button className="gap-2" onClick={handleAdd}>
+            <Plus size={16} />
+            Add Employee
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -141,13 +186,33 @@ export function EmployeesPage(): React.ReactElement {
                       </Badge>
                     </td>
                     <td className="p-4 text-right">
-                      <button
-                        onClick={() => handleViewEmployee(emp)}
-                        className="p-2 rounded-lg text-[#A3A3A3] hover:bg-[rgb(55,55,55)] transition-colors"
-                        aria-label={`View ${emp.firstName} ${emp.lastName}`}
-                      >
-                        <MoreHorizontal size={16} />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleViewEmployee(emp)}
+                          className="p-2 rounded-lg text-[#A3A3A3] hover:bg-[rgb(55,55,55)] transition-colors"
+                          title="View"
+                        >
+                          <Eye size={14} />
+                        </button>
+                        {hasPermission('employees:update') && (
+                          <button
+                            onClick={() => handleEdit(emp)}
+                            className="p-2 rounded-lg text-[#A3A3A3] hover:bg-[rgb(55,55,55)] transition-colors"
+                            title="Edit"
+                          >
+                            <Edit size={14} />
+                          </button>
+                        )}
+                        {hasPermission('employees:delete') && (
+                          <button
+                            onClick={() => setDeleteTarget(emp)}
+                            className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -221,12 +286,34 @@ export function EmployeesPage(): React.ReactElement {
 
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setShowDetailDialog(false)}>Close</Button>
-                <Button className="flex-1">Edit Employee</Button>
+                {hasPermission('employees:update') && (
+                  <Button className="flex-1" onClick={() => { setShowDetailDialog(false); handleEdit(selectedEmployee); }}>
+                    Edit Employee
+                  </Button>
+                )}
               </div>
             </div>
           </>
         )}
       </Dialog>
+
+      {/* Create/Edit Modal */}
+      <EmployeeFormModal
+        open={showFormModal}
+        onClose={() => setShowFormModal(false)}
+        onSubmit={handleFormSubmit}
+        employee={editEmployee}
+      />
+
+      {/* Delete Confirm */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Employee"
+        message={`Are you sure you want to delete ${deleteTarget?.firstName} ${deleteTarget?.lastName}? This action cannot be undone.`}
+        confirmLabel="Delete"
+      />
     </div>
   );
 }

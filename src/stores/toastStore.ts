@@ -1,0 +1,52 @@
+import { create } from 'zustand';
+
+export type ToastVariant = 'success' | 'error' | 'warning' | 'info';
+
+export interface Toast {
+  id: string;
+  title: string;
+  message?: string;
+  variant: ToastVariant;
+  duration?: number;
+}
+
+interface ToastStore {
+  toasts: Toast[];
+  addToast: (toast: Omit<Toast, 'id'>) => void;
+  removeToast: (id: string) => void;
+  clearToasts: () => void;
+}
+
+let toastCounter = 0;
+
+export const useToastStore = create<ToastStore>((set) => ({
+  toasts: [],
+
+  addToast: (toast) => {
+    const id = `toast-${++toastCounter}-${Date.now()}`;
+    const duration = toast.duration ?? 4000;
+    set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }));
+    if (duration > 0) {
+      setTimeout(() => {
+        set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
+      }, duration);
+    }
+  },
+
+  removeToast: (id) =>
+    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+
+  clearToasts: () => set({ toasts: [] }),
+}));
+
+// Convenience helpers
+export const toast = {
+  success: (title: string, message?: string) =>
+    useToastStore.getState().addToast({ title, message, variant: 'success' }),
+  error: (title: string, message?: string) =>
+    useToastStore.getState().addToast({ title, message, variant: 'error' }),
+  warning: (title: string, message?: string) =>
+    useToastStore.getState().addToast({ title, message, variant: 'warning' }),
+  info: (title: string, message?: string) =>
+    useToastStore.getState().addToast({ title, message, variant: 'info' }),
+};
